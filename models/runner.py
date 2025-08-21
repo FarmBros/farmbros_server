@@ -2,7 +2,9 @@ import os
 import dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker as async_sessionmaker, declarative_base
+from sqlalchemy.ext.asyncio import async_sessionmaker
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import declarative_base
 
 dotenv.load_dotenv()
 
@@ -11,7 +13,7 @@ password = os.getenv('DB_PASS')
 database = os.getenv('DB_NAME')
 host = os.getenv('DB_HOST')
 
-database_uri = f"mysql+aiomysql://{db_user}:{password}@{host}/{database}"
+database_uri = f"postgresql+asyncpg://{db_user}:{password}@{host}/{database}"
 
 engine = create_async_engine(
     database_uri,
@@ -36,5 +38,4 @@ async def init_db():
     async with engine.begin() as conn:
         # Create all tables in the database
         await conn.run_sync(Base.metadata.create_all)
-    print("Database initialized and tables created.")
-
+        print("Database initialized and tables created.")

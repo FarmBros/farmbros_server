@@ -57,9 +57,8 @@ async def login_user(data, session) -> dict:
             user_instance.increment_failed_login()
             return {"status": "error", "message": "Incorrect password"}
 
-        user_instance.last_login = str(datetime.datetime.now())
+        user_instance.last_login = datetime.datetime.now()
         user_instance.first_login = False
-        print(user_instance.to_dict())
         token = auth.create_JWT(user_instance.to_dict())
 
         await session.commit()

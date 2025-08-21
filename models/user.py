@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, UniqueConstraint
 from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
@@ -56,6 +57,9 @@ class User(Base):
     timezone = Column(String(50), default='UTC', nullable=True)
     language = Column(String(10), default='en', nullable=True)
     theme = Column(String(20), default='light', nullable=True)
+
+    # Relationships
+    farms = relationship("Farm", back_populates="owner", cascade="save-update, merge")
 
     # Additional constraints
     __table_args__ = (
