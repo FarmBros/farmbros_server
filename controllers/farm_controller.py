@@ -74,7 +74,7 @@ async def get_farm(
         farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
         farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farm.to_dict()
+    return farm.to_dict(include_geometry=include_geojson)
 
 
 async def get_farms_by_owner(
