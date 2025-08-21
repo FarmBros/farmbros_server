@@ -59,18 +59,13 @@ async def create_farm(
 
 async def get_farm(
         session: AsyncSession,
-        farm_id: Optional[int] = None,
-        farm_uuid: Optional[str] = None,
+        user: Dict[str, Any],
+        farm_id: Optional[str] = None,
         include_geojson: bool = True
 ) -> Optional[Farm]:
     query = select(Farm)
 
-    if farm_id:
-        query = query.filter(Farm.id == farm_id)
-    elif farm_uuid:
-        query = query.filter(Farm.uuid == farm_uuid)
-    else:
-        return None
+    query = query.filter(Farm.uuid == farm_id)
 
     result = await session.execute(query)
     farm = result.scalar_one_or_none()
@@ -79,7 +74,7 @@ async def get_farm(
         farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
         farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farm
+    return farm.to_dict()
 
 
 async def get_farms_by_owner(

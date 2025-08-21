@@ -94,7 +94,7 @@ async def get_user_from_token(token, session) -> dict:
         user_instance = await session.execute(stmt)
         user_instance = user_instance.scalar_one_or_none()
         if not user_instance:
-            return {"status": "error", "message": "User not found"}
+            return {"status": "error", "message": "Invalid token"}
         return {
             "status": "success",
             "user": user_instance.to_dict()

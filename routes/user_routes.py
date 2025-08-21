@@ -41,7 +41,7 @@ async def get_current_user(
     if not user_data:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if user_data['status'] == "error":
-        raise HTTPException(status_code=500, detail=user_data['message'])
+        raise HTTPException(status_code=401, detail=user_data['message'])
     return user_data['user']
 
 async def get_admin_user(

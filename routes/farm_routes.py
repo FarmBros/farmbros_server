@@ -28,3 +28,21 @@ async def create_farm(
         data=data,
         user=user
     )
+
+@router.post("/get_farm", response_model=None)
+async def get_farm(
+        request: Request,
+        user: Annotated[dict, Depends(get_current_user)],
+        session: AsyncSession = Depends(runner.get_db_session),
+        ):
+    farm_id = await request.json()
+    try:
+        farm_id = farm_id['farm_id']
+    except KeyError:
+        raise HTTPException(status_code=400, detail="farm_id is required")
+
+    return await farm_controller.get_farm(
+        session=session,
+        farm_id=farm_id,
+        user=user
+    )
