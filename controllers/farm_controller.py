@@ -1,20 +1,18 @@
-from typing import List, Optional, Dict, Any
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func, text, select
-from shapely.geometry import shape, Point, Polygon
 import json
-from datetime import datetime
-import uuid as uuid_lib
+from typing import List, Optional, Dict, Any
+
+from shapely.geometry import shape, Polygon
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from models.farm import Farm
-from models.user import User
 
 
 async def create_farm(
         session: AsyncSession,
         data: Dict[str, Any],
         user: Dict[str, Any]
-) -> Farm:
+) -> Dict[str, Any]:
     try:
         name = data.get("name")
         description = data.get("description", "")
@@ -50,11 +48,19 @@ async def create_farm(
         await session.commit()
         await session.refresh(farm)
 
-        return farm.to_dict()
+        return {
+            "status": "success",
+            "data": farm.to_dict(),
+            "error": None
+        }
 
     except Exception as e:
         await session.rollback()
-        raise Exception(f"Error creating farm: {str(e)}")
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_farm(
@@ -62,41 +68,72 @@ async def get_farm(
         user: Dict[str, Any],
         farm_id: Optional[str] = None,
         include_geojson: bool = True
-) -> Optional[Farm]:
-    query = select(Farm)
+) -> Dict[str, Any]:
+    try:
+        query = select(Farm)
 
-    query = query.filter(Farm.uuid == farm_id)
+        query = query.filter(Farm.uuid == farm_id)
 
-    result = await session.execute(query)
-    farm = result.scalar_one_or_none()
+        result = await session.execute(query)
+        farm = result.scalar_one_or_none()
 
-    if farm and include_geojson:
-        farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
-        farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+        if not farm:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Farm not found"
+            }
 
-    return farm.to_dict(include_geometry=include_geojson)
+        if include_geojson:
+            farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
+            farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+
+        return {
+            "status": "success",
+            "data": farm.to_dict(include_geometry=include_geojson),
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_farms_by_owner(
         session: AsyncSession,
-        owner_id: int,
+        owner_id: str,
         include_geojson: bool = True,
         skip: int = 0,
         limit: int = 100
-) -> List[Farm]:
-    query = select(Farm).filter(
-        Farm.owner_id == owner_id
-    ).offset(skip).limit(limit)
+) -> Dict[str, Any]:
+    try:
+        query = select(Farm).filter(
+            Farm.owner_id == owner_id
+        ).offset(skip).limit(limit)
 
-    result = await session.execute(query)
-    farms = result.scalars().all()
+        result = await session.execute(query)
+        farms = result.scalars().all()
 
-    if include_geojson:
-        for farm in farms:
-            farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
-            farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+        if include_geojson:
+            for farm in farms:
+                farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
+                farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farms
+        return {
+            "status": "success",
+            "data": [farm.to_dict(include_geometry=include_geojson) for farm in farms],
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_all_farms(
@@ -104,34 +141,50 @@ async def get_all_farms(
         skip: int = 0,
         limit: int = 100,
         include_geojson: bool = False
-) -> List[Farm]:
-    query = select(Farm).offset(skip).limit(limit)
-    result = await session.execute(query)
-    farms = result.scalars().all()
+) -> Dict[str, Any]:
+    try:
+        query = select(Farm).offset(skip).limit(limit)
+        result = await session.execute(query)
+        farms = result.scalars().all()
 
-    if include_geojson:
-        for farm in farms:
-            farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
-            farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+        if include_geojson:
+            for farm in farms:
+                farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
+                farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farms
+        return {
+            "status": "success",
+            "data": [farm.to_dict(include_geometry=include_geojson) for farm in farms],
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def update_farm(
         session: AsyncSession,
-        farm_id: int,
+        farm_id: str,
         name: Optional[str] = None,
         description: Optional[str] = None,
         boundary_geojson: Optional[Dict[str, Any]] = None
-) -> Optional[Farm]:
-    query = select(Farm).filter(Farm.id == farm_id)
-    result = await session.execute(query)
-    farm = result.scalar_one_or_none()
-
-    if not farm:
-        return None
-
+) -> Dict[str, Any]:
     try:
+        query = select(Farm).filter(Farm.uuid == farm_id)
+        result = await session.execute(query)
+        farm = result.scalar_one_or_none()
+
+        if not farm:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Farm not found"
+            }
+
         if name is not None:
             farm.name = name
 
@@ -163,28 +216,50 @@ async def update_farm(
         farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
         farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-        return farm
+        return {
+            "status": "success",
+            "data": farm.to_dict(include_geometry=True),
+            "error": None
+        }
 
     except Exception as e:
         await session.rollback()
-        raise Exception(f"Error updating farm: {str(e)}")
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
-async def delete_farm(session: AsyncSession, farm_id: int) -> bool:
-    query = select(Farm).filter(Farm.id == farm_id)
-    result = await session.execute(query)
-    farm = result.scalar_one_or_none()
-
-    if not farm:
-        return False
-
+async def delete_farm(session: AsyncSession, farm_id: str) -> Dict[str, Any]:
     try:
+        query = select(Farm).filter(Farm.uuid == farm_id)
+        result = await session.execute(query)
+        farm = result.scalar_one_or_none()
+
+        if not farm:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Farm not found"
+            }
+
         await session.delete(farm)
         await session.commit()
-        return True
+        
+        return {
+            "status": "success",
+            "data": {"deleted": True, "farm_id": farm_id},
+            "error": None
+        }
+        
     except Exception as e:
         await session.rollback()
-        raise Exception(f"Error deleting farm: {str(e)}")
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_farms_within_area(
@@ -193,64 +268,114 @@ async def get_farms_within_area(
         center_lat: float,
         radius_meters: float,
         limit: int = 50
-) -> List[Farm]:
-    center_point = func.ST_GeomFromText(f'POINT({center_lng} {center_lat})', 4326)
+) -> Dict[str, Any]:
+    try:
+        center_point = func.ST_GeomFromText(f'POINT({center_lng} {center_lat})', 4326)
 
-    query = select(Farm).filter(
-        func.ST_DWithin(
-            Farm.centroid,
-            center_point,
-            radius_meters
-        )
-    ).limit(limit)
+        query = select(Farm).filter(
+            func.ST_DWithin(
+                Farm.centroid,
+                center_point,
+                radius_meters
+            )
+        ).limit(limit)
 
-    result = await session.execute(query)
-    farms = result.scalars().all()
+        result = await session.execute(query)
+        farms = result.scalars().all()
 
-    for farm in farms:
-        farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
-        farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+        for farm in farms:
+            farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
+            farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farms
+        return {
+            "status": "success",
+            "data": [farm.to_dict(include_geometry=True) for farm in farms],
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_farms_intersecting_polygon(
         session: AsyncSession,
         polygon_geojson: Dict[str, Any],
         limit: int = 50
-) -> List[Farm]:
-    polygon_shape = shape(polygon_geojson)
-    polygon_wkt = func.ST_GeomFromText(polygon_shape.wkt, 4326)
+) -> Dict[str, Any]:
+    try:
+        polygon_shape = shape(polygon_geojson)
+        polygon_wkt = func.ST_GeomFromText(polygon_shape.wkt, 4326)
 
-    query = select(Farm).filter(
-        func.ST_Intersects(
-            Farm.boundary,
-            polygon_wkt
-        )
-    ).limit(limit)
+        query = select(Farm).filter(
+            func.ST_Intersects(
+                Farm.boundary,
+                polygon_wkt
+            )
+        ).limit(limit)
 
-    result = await session.execute(query)
-    farms = result.scalars().all()
+        result = await session.execute(query)
+        farms = result.scalars().all()
 
-    for farm in farms:
-        farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
-        farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
+        for farm in farms:
+            farm.boundary_geojson = await get_boundary_as_geojson(session, farm.id)
+            farm.centroid_geojson = await get_centroid_as_geojson(session, farm.id)
 
-    return farms
+        return {
+            "status": "success",
+            "data": [farm.to_dict(include_geometry=True) for farm in farms],
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
-async def calculate_total_area_by_owner(session: AsyncSession, owner_id: int) -> float:
-    query = select(func.sum(Farm.area_sqm)).filter(Farm.owner_id == owner_id)
-    result = await session.execute(query)
-    total_area = result.scalar()
+async def calculate_total_area_by_owner(session: AsyncSession, owner_id: str) -> Dict[str, Any]:
+    try:
+        query = select(func.sum(Farm.area_sqm)).filter(Farm.owner_id == owner_id)
+        result = await session.execute(query)
+        total_area = result.scalar()
 
-    return total_area or 0.0
+        return {
+            "status": "success",
+            "data": {"total_area_sqm": total_area or 0.0},
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
-async def count_farms_by_owner(session: AsyncSession, owner_id: int) -> int:
-    query = select(func.count(Farm.id)).filter(Farm.owner_id == owner_id)
-    result = await session.execute(query)
-    return result.scalar()
+async def count_farms_by_owner(session: AsyncSession, owner_id: str) -> Dict[str, Any]:
+    try:
+        query = select(func.count(Farm.id)).filter(Farm.owner_id == owner_id)
+        result = await session.execute(query)
+        count = result.scalar()
+
+        return {
+            "status": "success",
+            "data": {"count": count},
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
 
 
 async def get_boundary_as_geojson(session: AsyncSession, farm_id: int) -> Optional[Dict]:
@@ -292,43 +417,59 @@ def validate_geojson_polygon(geojson_data: Dict[str, Any]) -> bool:
         return False
 
 
-async def get_farm_statistics(session: AsyncSession, owner_id: Optional[int] = None) -> Dict[str, Any]:
-    count_query = select(func.count(Farm.id))
+async def get_farm_statistics(session: AsyncSession, owner_id: Optional[str] = None) -> Dict[str, Any]:
+    try:
+        count_query = select(func.count(Farm.id))
 
-    if owner_id:
-        count_query = count_query.filter(Farm.owner_id == owner_id)
+        if owner_id:
+            count_query = count_query.filter(Farm.owner_id == owner_id)
 
-    count_result = await session.execute(count_query)
-    total_farms = count_result.scalar()
+        count_result = await session.execute(count_query)
+        total_farms = count_result.scalar()
 
-    if total_farms == 0:
+        if total_farms == 0:
+            return {
+                "status": "success",
+                "data": {
+                    'total_farms': 0,
+                    'total_area_sqm': 0,
+                    'total_area_hectares': 0,
+                    'average_area_sqm': 0,
+                    'smallest_farm_sqm': 0,
+                    'largest_farm_sqm': 0
+                },
+                "error": None
+            }
+
+        stats_query = select(
+            func.sum(Farm.area_sqm).label('total_area'),
+            func.avg(Farm.area_sqm).label('avg_area'),
+            func.min(Farm.area_sqm).label('min_area'),
+            func.max(Farm.area_sqm).label('max_area')
+        )
+
+        if owner_id:
+            stats_query = stats_query.filter(Farm.owner_id == owner_id)
+
+        stats_result = await session.execute(stats_query)
+        result = stats_result.first()
+
         return {
-            'total_farms': 0,
-            'total_area_sqm': 0,
-            'total_area_hectares': 0,
-            'average_area_sqm': 0,
-            'smallest_farm_sqm': 0,
-            'largest_farm_sqm': 0
+            "status": "success",
+            "data": {
+                'total_farms': total_farms,
+                'total_area_sqm': float(result.total_area or 0),
+                'total_area_hectares': float(result.total_area or 0) / 10000,
+                'average_area_sqm': float(result.avg_area or 0),
+                'smallest_farm_sqm': float(result.min_area or 0),
+                'largest_farm_sqm': float(result.max_area or 0)
+            },
+            "error": None
         }
 
-    stats_query = select(
-        func.sum(Farm.area_sqm).label('total_area'),
-        func.avg(Farm.area_sqm).label('avg_area'),
-        func.min(Farm.area_sqm).label('min_area'),
-        func.max(Farm.area_sqm).label('max_area')
-    )
-
-    if owner_id:
-        stats_query = stats_query.filter(Farm.owner_id == owner_id)
-
-    stats_result = await session.execute(stats_query)
-    result = stats_result.first()
-
-    return {
-        'total_farms': total_farms,
-        'total_area_sqm': float(result.total_area or 0),
-        'total_area_hectares': float(result.total_area or 0) / 10000,
-        'average_area_sqm': float(result.avg_area or 0),
-        'smallest_farm_sqm': float(result.min_area or 0),
-        'largest_farm_sqm': float(result.max_area or 0)
-    }
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
