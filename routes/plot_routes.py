@@ -1,11 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Request, Depends
+from fastapi.security import HTTPBearer
 from sqlalchemy.orm import Session
 
 from models import runner
-from routes.user_routes import get_current_user, get_admin_user
+from routes.user_routes import get_current_user
 router = APIRouter(
     prefix="/plots",
     tags=["Plot"]

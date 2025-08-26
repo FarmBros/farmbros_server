@@ -1,11 +1,16 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, UniqueConstraint
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Text, UniqueConstraint, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
+import enum
 
 from models.runner import Base
+
+class LoginType(enum.Enum):
+    PASSWORD = "password"
+    GOOGLE_AUTH = "google-auth"
+    BOTH = "both"
 
 class User(Base):
     __tablename__ = 'users'
@@ -19,8 +24,12 @@ class User(Base):
     # Authentication fields
     username = Column(String(80), unique=True, nullable=False, index=True)
     email = Column(String(120), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)
     role = Column(String(50), default='user', nullable=False)
+    
+    # Google OAuth fields
+    google_id = Column(String(255), unique=True, nullable=True, index=True)
+    login_type = Column(Enum(LoginType), default=LoginType.PASSWORD, nullable=False)
 
     # Personal information
     first_name = Column(String(50), nullable=True)
@@ -67,10 +76,11 @@ class User(Base):
         UniqueConstraint('username', name='uq_user_username'),
     )
 
-    def __init__(self, username, email, password, **kwargs):
+    def __init__(self, username, email, password=None, **kwargs):
         self.username = username
         self.email = email
-        self.set_password(password)
+        if password:
+            self.set_password(password)
 
         # Set optional fields
         self.first_name = kwargs.get('first_name')
@@ -79,9 +89,18 @@ class User(Base):
         self.bio = kwargs.get('bio')
         self.timezone = kwargs.get('timezone', 'UTC')
         self.language = kwargs.get('language', 'en')
+        self.google_id = kwargs.get('google_id')
+        
+        # Set login type based on authentication method
+        if self.google_id and password:
+            self.login_type = LoginType.BOTH
+        elif self.google_id:
+            self.login_type = LoginType.GOOGLE_AUTH
+        else:
+            self.login_type = LoginType.PASSWORD
 
         # Generate full name if first and last names are provided
-        if self.first_name and self.last_name:
+        if self.first_name and self.last_name and not self.full_name:
             self.full_name = f"{self.first_name} {self.last_name}"
 
     def __repr__(self):
@@ -165,6 +184,8 @@ class User(Base):
             'username': self.username,
             'email': self.email,
             'role': self.role,
+            'google_id': self.google_id,
+            'login_type': self.login_type.value if self.login_type else None,
             'first_name': self.first_name,
             'last_name': self.last_name,
             'full_name': self.full_name,
@@ -191,50 +212,4 @@ class User(Base):
 
         return user_dict
 
-
-    # # Example usage and database setup
-    # if __name__ == "__main__":
-    #     from sqlalchemy import create_engine
-    #     from sqlalchemy.orm import sessionmaker
-    #
-    #     # Create database engine (using SQLite for example)
-    #     engine = create_engine('sqlite:///users.db', echo=True)
-    #
-    #     # Create all tables
-    #     Base.metadata.create_all(engine)
-    #
-    #     # Create session
-    #     Session = sessionmaker(bind=engine)
-    #     session = Session()
-    #
-    #     # Create a new user
-    #     new_user = User(
-    #         username='john_doe',
-    #         email='john@example.com',
-    #         password='secure_password123',
-    #         first_name='John',
-    #         last_name='Doe',
-    #         phone_number='+1234567890'
-    #     )
-    #
-    #     # Generate verification token
-    #     verification_token = new_user.generate_verification_token()
-    #     print(f"Verification token: {verification_token}")
-    #
-    #     # Add user to database
-    #     session.add(new_user)
-    #     session.commit()
-    #
-    #     print(f"Created user: {new_user}")
-    #     print(f"User dict: {new_user.to_dict()}")
-    #
-    #     # Query user
-    #     user = session.query(User).filter_by(username='john_doe').first()
-    #     print(f"Found user: {user}")
-    #
-    #     # Test password
-    #     print(f"Password check: {user.check_password('secure_password123')}")
-    #
-    #     session.close()
-    #
 

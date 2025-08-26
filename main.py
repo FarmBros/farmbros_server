@@ -2,7 +2,6 @@ from fastapi import FastAPI
 from routes import user_routes, farm_routes, plot_routes
 
 from models import runner
-import asyncio
 
 app = FastAPI()
 

@@ -1,9 +1,7 @@
 from functools import wraps
-from functools import wraps, partial
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
-import json
 
 import auth
 

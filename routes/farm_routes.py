@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Request, Depends, HTTPException
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from models import runner

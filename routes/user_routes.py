@@ -31,6 +31,14 @@ async def login_user(
     data = await request.json()
     return await user_controller.login_user(data, session)
 
+@router.post("/google_signup", response_model=dict)
+async def google_signup(
+        request: Request,
+        session: AsyncSession = Depends(runner.get_db_session),
+        ):
+    data = await request.json()
+    return await user_controller.google_signup(data, session)
+
 
 async def get_current_user(
         credentials: HTTPAuthorizationCredentials = Depends(security),
