@@ -24,7 +24,10 @@ async def create_farm(
         boundary_shape = shape(boundary_geojson)
 
         if not isinstance(boundary_shape, Polygon):
-            raise ValueError("Boundary must be a Polygon")
+            return {
+                "status": "error",
+                "message": "Invalid shape",
+            }
 
         centroid = boundary_shape.centroid
 

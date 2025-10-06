@@ -29,7 +29,7 @@ class Farm(Base):
     area_sqm = Column(Float)
 
     # Relationships
-    # plots = relationship("Plot", backref="farm", cascade="all, delete-orphan")
+    plots = relationship("Plot", back_populates="farm", cascade="all, delete-orphan")
     owner = relationship("User", back_populates="farms")
 
     def __init__(self, name, owner_id, **kwargs):

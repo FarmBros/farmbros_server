@@ -12,3 +12,5 @@ wheels/
 alembic.ini
 .idea
 dump.rdb
+*.http
+endpoints
