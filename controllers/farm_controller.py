@@ -1,12 +1,14 @@
 import json
+from os import supports_dir_fd
 from typing import Optional, Dict, Any
 
 from shapely.geometry import shape, Polygon
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from aiocache import Cache, cached
 
 from models.farm import Farm
-
+from services.caching import *
 
 async def create_farm(
         session: AsyncSession,
@@ -47,6 +49,14 @@ async def create_farm(
 
         await session.commit()
         await session.refresh(farm)
+
+        if not await invalidate_patterns(user['uuid'], [
+            "farms:user_list:*",
+            "farms:count",
+            "dashboard",
+            "stats:*",
+            "plots.*"
+        ]): return {"status": "error", "message": "Could not invalidate farm cache"}
 
         return {
             "status": "success",
@@ -102,16 +112,23 @@ async def get_farm(
         }
 
 
+
+
+@cached(cache=Cache.REDIS, ttl=86400,
+    key_builder=lambda f, session, user_id, include_geojson=True, skip=0, limit=100:
+    gen_user_key(user_id, "farms", "user_list",
+                  gen_query_hash({"skip": skip, "limit": limit, "include_geojson": include_geojson}))
+)
 async def get_farms_by_owner(
         session: AsyncSession,
-        owner_id: str,
+        user_id: str,
         include_geojson: bool = True,
         skip: int = 0,
         limit: int = 100
 ) -> Dict[str, Any]:
     try:
         query = select(Farm).filter(
-            Farm.owner_id == owner_id
+            Farm.owner_id == user_id
         ).offset(skip).limit(limit)
 
         result = await session.execute(query)

@@ -26,6 +26,18 @@ class PlotType(enum.Enum):
     ORCHARD = "orchard"
     PASTURE = "pasture"
 
+plot_types = [
+    "field",
+    "barn",
+    "pasture"
+    "green-house"
+    "chicken-pen",
+    "cow-shed",
+    "fish-pond"
+    "residence",
+    "natural-area"
+    "water-source"
+]
 
 class Plot(Base):
     __tablename__ = 'plots'

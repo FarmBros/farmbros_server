@@ -8,9 +8,9 @@ import enum
 from models.runner import Base
 
 class LoginType(enum.Enum):
-    PASSWORD = "password"
-    GOOGLE_AUTH = "google-auth"
-    BOTH = "both"
+    PASSWORD = "PASSWORD"
+    GOOGLE_AUTH = "GOOGLE_AUTH"
+    BOTH = "BOTH"
 
 class User(Base):
     __tablename__ = 'users'

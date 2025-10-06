@@ -21,7 +21,7 @@ async def create_farm(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     return await farm_controller.create_farm(
         session=session,
@@ -29,12 +29,13 @@ async def create_farm(
         user=user
     )
 
+
 @router.post("/get_farm", response_model=None)
 async def get_farm(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     try:
         farm_id = data['farm_id']
@@ -48,12 +49,13 @@ async def get_farm(
         include_geojson=data.get('include_geojson', False)
     )
 
+
 @router.post("/get_all_farms", response_model=None)
 async def get_all_farms(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     return await farm_controller.get_all_farms(
         session=session,
@@ -62,12 +64,24 @@ async def get_all_farms(
         include_geojson=data.get('include_geojson', False)
     )
 
+
+@router.post("/get_user_farms", response_model=None)
+async def get_user_farms(
+        user: Annotated[dict, Depends(get_current_user)],
+        session: AsyncSession = Depends(runner.get_db_session),
+):
+    return await farm_controller.get_farms_by_owner(
+        session=session,
+        user_id=user['uuid']
+    )
+
+
 @router.post("/update_farm", response_model=None)
 async def update_farm(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     try:
         farm_id = data['farm_id']
@@ -82,12 +96,13 @@ async def update_farm(
         boundary_geojson=data.get('boundary_geojson')
     )
 
+
 @router.post("/delete_farm", response_model=None)
 async def delete_farm(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     try:
         farm_id = data['farm_id']
@@ -99,12 +114,13 @@ async def delete_farm(
         farm_id=farm_id
     )
 
+
 @router.post("/get_farm_stats", response_model=None)
 async def get_farm_stats(
         request: Request,
         user: Annotated[dict, Depends(get_current_user)],
         session: AsyncSession = Depends(runner.get_db_session),
-        ):
+):
     data = await request.json()
     return await farm_controller.get_farm_statistics(
         session=session,
