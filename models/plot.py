@@ -60,7 +60,6 @@ class Plot(Base):
 
     # Relationships
     farm = relationship("Farm", back_populates="plots")
-    plot_type_data = relationship("PlotTypeBase", back_populates="plot", cascade="all, delete-orphan", uselist=False)
 
     def __init__(self, name, farm_id, plot_type=PlotType.FIELD, **kwargs):
         self.name = name
@@ -98,8 +97,8 @@ class Plot(Base):
         if include_geometry and hasattr(self, 'centroid_geojson'):
             plot_dict['centroid'] = self.centroid_geojson
 
-        if include_type_data and self.plot_type_data:
-            plot_dict['plot_type_data'] = self.plot_type_data.to_dict()
+        # Note: plot_type_data is now handled in the controller manually
+        # This will be set by the controller when include_type_data is True
 
         return plot_dict
 

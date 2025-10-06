@@ -129,7 +129,8 @@ async def update_plot(
         plot_number=data.get('plot_number'),
         plot_type=data.get('plot_type'),
         notes=data.get('notes'),
-        boundary_geojson=data.get('boundary_geojson')
+        boundary_geojson=data.get('boundary_geojson'),
+        plot_type_data=data.get('plot_type_data')
     )
 
 

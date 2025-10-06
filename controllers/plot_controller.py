@@ -37,6 +37,54 @@ async def create_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type
     return type_data
 
 
+async def get_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: str):
+    """Get plot type data for a specific plot"""
+    if plot_type not in PLOT_TYPE_MODELS:
+        return None
+    
+    plot_type_model = PLOT_TYPE_MODELS[plot_type]
+    
+    query = select(plot_type_model).filter(plot_type_model.plot_id == plot_uuid)
+    result = await session.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def delete_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: str):
+    """Delete plot type data for a specific plot"""
+    if plot_type not in PLOT_TYPE_MODELS:
+        return
+    
+    plot_type_model = PLOT_TYPE_MODELS[plot_type]
+    
+    query = select(plot_type_model).filter(plot_type_model.plot_id == plot_uuid)
+    result = await session.execute(query)
+    type_data = result.scalar_one_or_none()
+    
+    if type_data:
+        await session.delete(type_data)
+
+
+async def attach_plot_type_data_to_plots(session: AsyncSession, plots, include_geojson=True):
+    """Helper function to attach plot type data to a list of plots"""
+    plot_dicts = []
+    for plot in plots:
+        if include_geojson:
+            plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
+            plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
+
+        plot_dict = plot.to_dict(include_geometry=include_geojson)
+        
+        # Get plot type data manually
+        if plot.plot_type:
+            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+            if type_data:
+                plot_dict['plot_type_data'] = type_data.to_dict()
+        
+        plot_dicts.append(plot_dict)
+    
+    return plot_dicts
+
+
 async def create_plot(
         session: AsyncSession,
         data: Dict[str, Any],
@@ -134,8 +182,9 @@ async def create_plot(
 
         # Create plot type specific data if provided
         if plot_type_data:
-            await create_plot_type_data(session, plot.uuid, plot_type_str, plot_type_data)
+            type_data = await create_plot_type_data(session, plot.uuid, plot_type_str, plot_type_data)
             await session.commit()
+            await session.refresh(plot)  # Refresh to get the relationship data
 
         # Invalidate relevant caches
         if not await invalidate_patterns(user['uuid'], [
@@ -147,9 +196,16 @@ async def create_plot(
         ]): 
             return {"status": "error", "message": "Could not invalidate plot cache"}
 
+        # Get plot type data manually
+        plot_dict = plot.to_dict()
+        if plot.plot_type:
+            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+            if type_data:
+                plot_dict['plot_type_data'] = type_data.to_dict()
+
         return {
             "status": "success",
-            "data": plot.to_dict(include_type_data=True),
+            "data": plot_dict,
             "error": None
         }
 
@@ -189,9 +245,16 @@ async def get_plot(
             plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
             plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
 
+        # Get plot type data manually
+        plot_dict = plot.to_dict(include_geometry=include_geojson)
+        if plot.plot_type:
+            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+            if type_data:
+                plot_dict['plot_type_data'] = type_data.to_dict()
+
         return {
             "status": "success",
-            "data": plot.to_dict(include_geometry=include_geojson, include_type_data=True),
+            "data": plot_dict,
             "error": None
         }
 
@@ -235,14 +298,11 @@ async def get_plots_by_farm(
         result = await session.execute(query)
         plots = result.scalars().all()
 
-        if include_geojson:
-            for plot in plots:
-                plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
-                plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
+        plot_dicts = await attach_plot_type_data_to_plots(session, plots, include_geojson)
 
         return {
             "status": "success",
-            "data": [plot.to_dict(include_geometry=include_geojson, include_type_data=True) for plot in plots],
+            "data": plot_dicts,
             "error": None
         }
 
@@ -274,14 +334,11 @@ async def get_plots_by_user(
         result = await session.execute(query)
         plots = result.scalars().all()
 
-        if include_geojson:
-            for plot in plots:
-                plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
-                plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
+        plot_dicts = await attach_plot_type_data_to_plots(session, plots, include_geojson)
 
         return {
             "status": "success",
-            "data": [plot.to_dict(include_geometry=include_geojson, include_type_data=True) for plot in plots],
+            "data": plot_dicts,
             "error": None
         }
 
@@ -301,7 +358,8 @@ async def update_plot(
         plot_number: Optional[str] = None,
         plot_type: Optional[str] = None,
         notes: Optional[str] = None,
-        boundary_geojson: Optional[Dict[str, Any]] = None
+        boundary_geojson: Optional[Dict[str, Any]] = None,
+        plot_type_data: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     try:
         # Join with farm to check ownership
@@ -381,6 +439,20 @@ async def update_plot(
             area_query = area_result.scalar()
             plot.area_sqm = area_query
 
+        # Handle plot type data updates
+        if plot_type_data is not None:
+            # If plot type changed, we might need to create new type data
+            current_plot_type = plot.plot_type.value if plot.plot_type else "field"
+            target_plot_type = plot_type if plot_type else current_plot_type
+            
+            # Delete existing plot type data if it exists
+            await delete_plot_type_data(session, plot.uuid, current_plot_type)
+            await session.flush()
+            
+            # Create new plot type data
+            if plot_type_data:
+                await create_plot_type_data(session, plot.uuid, target_plot_type, plot_type_data)
+
         plot.update_timestamp()
 
         await session.commit()
@@ -403,9 +475,16 @@ async def update_plot(
         plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
         plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
 
+        # Get plot type data manually
+        plot_dict = plot.to_dict(include_geometry=True)
+        if plot.plot_type:
+            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+            if type_data:
+                plot_dict['plot_type_data'] = type_data.to_dict()
+
         return {
             "status": "success",
-            "data": plot.to_dict(include_geometry=True, include_type_data=True),
+            "data": plot_dict,
             "error": None
         }
 
@@ -498,14 +577,11 @@ async def get_plots_by_type(
         result = await session.execute(query)
         plots = result.scalars().all()
 
-        if include_geojson:
-            for plot in plots:
-                plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
-                plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
+        plot_dicts = await attach_plot_type_data_to_plots(session, plots, include_geojson)
 
         return {
             "status": "success",
-            "data": [plot.to_dict(include_geometry=include_geojson, include_type_data=True) for plot in plots],
+            "data": plot_dicts,
             "error": None
         }
 
