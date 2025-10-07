@@ -34,11 +34,12 @@ async def create_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type
                 setattr(type_data, key, value)
     
     session.add(type_data)
+    await session.flush()  # Flush to get the UUID
     return type_data
 
 
 async def get_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: str):
-    """Get plot type data for a specific plot"""
+    """Get plot type data for a specific plot (legacy function - use get_plot_type_data_by_uuid for new code)"""
     if plot_type not in PLOT_TYPE_MODELS:
         return None
     
@@ -49,8 +50,64 @@ async def get_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: s
     return result.scalar_one_or_none()
 
 
+async def get_plot_type_data_by_uuid(session: AsyncSession, plot_type_uuid: str, plot_type: str):
+    """Get plot type data by its UUID"""
+    if plot_type not in PLOT_TYPE_MODELS:
+        return None
+    
+    plot_type_model = PLOT_TYPE_MODELS[plot_type]
+    
+    query = select(plot_type_model).filter(plot_type_model.uuid == plot_type_uuid)
+    result = await session.execute(query)
+    return result.scalar_one_or_none()
+
+
+async def create_or_update_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: str, plot_type_data: dict = None, existing_plot_type_uuid: str = None):
+    """Create or update plot type data and return the plot type UUID"""
+    if plot_type not in PLOT_TYPE_MODELS:
+        return None
+    
+    plot_type_model = PLOT_TYPE_MODELS[plot_type]
+    
+    # If we have an existing plot type UUID, try to update it
+    if existing_plot_type_uuid:
+        existing_data = await get_plot_type_data_by_uuid(session, existing_plot_type_uuid, plot_type)
+        if existing_data:
+            # Update existing record
+            if plot_type_data:
+                existing_data.name = plot_type_data.get('name', existing_data.name)
+                existing_data.notes = plot_type_data.get('notes', existing_data.notes)
+                
+                # Update specific fields
+                for key, value in plot_type_data.items():
+                    if hasattr(existing_data, key) and key not in ['plot_id', 'id', 'uuid', 'created_at', 'updated_at']:
+                        setattr(existing_data, key, value)
+                
+                existing_data.update_timestamp()
+            
+            await session.flush()
+            return existing_data.uuid
+    
+    # Create new record
+    type_data = plot_type_model(
+        plot_id=plot_uuid,
+        name=plot_type_data.get('name', '') if plot_type_data else '',
+        notes=plot_type_data.get('notes', '') if plot_type_data else ''
+    )
+    
+    # Set specific fields based on plot type and provided data
+    if plot_type_data:
+        for key, value in plot_type_data.items():
+            if hasattr(type_data, key) and key not in ['plot_id', 'id', 'uuid', 'created_at', 'updated_at']:
+                setattr(type_data, key, value)
+    
+    session.add(type_data)
+    await session.flush()  # Flush to get the UUID
+    return type_data.uuid
+
+
 async def delete_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type: str):
-    """Delete plot type data for a specific plot"""
+    """Delete plot type data for a specific plot (legacy function - use delete_plot_type_data_by_uuid for new code)"""
     if plot_type not in PLOT_TYPE_MODELS:
         return
     
@@ -62,6 +119,43 @@ async def delete_plot_type_data(session: AsyncSession, plot_uuid: str, plot_type
     
     if type_data:
         await session.delete(type_data)
+        await session.flush()  # Ensure deletion is processed
+
+
+async def delete_plot_type_data_by_uuid(session: AsyncSession, plot_type_uuid: str, plot_type: str):
+    """Delete plot type data by its UUID"""
+    if plot_type not in PLOT_TYPE_MODELS:
+        return
+    
+    plot_type_model = PLOT_TYPE_MODELS[plot_type]
+    
+    query = select(plot_type_model).filter(plot_type_model.uuid == plot_type_uuid)
+    result = await session.execute(query)
+    type_data = result.scalar_one_or_none()
+    
+    if type_data:
+        await session.delete(type_data)
+        await session.flush()  # Ensure deletion is processed
+
+
+async def delete_all_plot_type_data_for_plot(session: AsyncSession, plot_uuid: str):
+    """Delete all plot type data for a plot across all plot type tables"""
+    deleted_count = 0
+    
+    # Go through all plot type models and delete any data referencing this plot
+    for plot_type, plot_type_model in PLOT_TYPE_MODELS.items():
+        query = select(plot_type_model).filter(plot_type_model.plot_id == plot_uuid)
+        result = await session.execute(query)
+        type_data_list = result.scalars().all()
+        
+        for type_data in type_data_list:
+            await session.delete(type_data)
+            deleted_count += 1
+    
+    if deleted_count > 0:
+        await session.flush()  # Ensure all deletions are processed
+    
+    return deleted_count
 
 
 async def attach_plot_type_data_to_plots(session: AsyncSession, plots, include_geojson=True):
@@ -74,9 +168,9 @@ async def attach_plot_type_data_to_plots(session: AsyncSession, plots, include_g
 
         plot_dict = plot.to_dict(include_geometry=include_geojson)
         
-        # Get plot type data manually
-        if plot.plot_type:
-            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+        # Get plot type data using the new relationship
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
             if type_data:
                 plot_dict['plot_type_data'] = type_data.to_dict()
         
@@ -182,9 +276,12 @@ async def create_plot(
 
         # Create plot type specific data if provided
         if plot_type_data:
-            type_data = await create_plot_type_data(session, plot.uuid, plot_type_str, plot_type_data)
-            await session.commit()
-            await session.refresh(plot)  # Refresh to get the relationship data
+            plot_type_uuid = await create_or_update_plot_type_data(session, plot.uuid, plot_type_str, plot_type_data)
+            if plot_type_uuid:
+                plot.plot_type_id = plot_type_uuid  # Set the relationship
+                
+        await session.commit()
+        await session.refresh(plot)  # Refresh to get the relationship data
 
         # Invalidate relevant caches
         if not await invalidate_patterns(user['uuid'], [
@@ -196,10 +293,10 @@ async def create_plot(
         ]): 
             return {"status": "error", "message": "Could not invalidate plot cache"}
 
-        # Get plot type data manually
+        # Get plot type data using the new relationship
         plot_dict = plot.to_dict()
-        if plot.plot_type:
-            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
             if type_data:
                 plot_dict['plot_type_data'] = type_data.to_dict()
 
@@ -245,10 +342,10 @@ async def get_plot(
             plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
             plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
 
-        # Get plot type data manually
+        # Get plot type data using the new relationship
         plot_dict = plot.to_dict(include_geometry=include_geojson)
-        if plot.plot_type:
-            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
             if type_data:
                 plot_dict['plot_type_data'] = type_data.to_dict()
 
@@ -445,13 +542,26 @@ async def update_plot(
             current_plot_type = plot.plot_type.value if plot.plot_type else "field"
             target_plot_type = plot_type if plot_type else current_plot_type
             
-            # Delete existing plot type data if it exists
-            await delete_plot_type_data(session, plot.uuid, current_plot_type)
-            await session.flush()
-            
-            # Create new plot type data
-            if plot_type_data:
-                await create_plot_type_data(session, plot.uuid, target_plot_type, plot_type_data)
+            # If plot type changed, delete old data and create new
+            if plot_type and plot_type != current_plot_type:
+                # Delete existing plot type data if it exists
+                if plot.plot_type_id:
+                    await delete_plot_type_data_by_uuid(session, plot.plot_type_id, current_plot_type)
+                plot.plot_type_id = None  # Clear the relationship
+                await session.flush()
+                
+                # Create new plot type data
+                if plot_type_data:
+                    plot_type_uuid = await create_or_update_plot_type_data(session, plot.uuid, target_plot_type, plot_type_data)
+                    if plot_type_uuid:
+                        plot.plot_type_id = plot_type_uuid  # Set the new relationship
+            else:
+                # Same plot type, update existing data or create new
+                plot_type_uuid = await create_or_update_plot_type_data(
+                    session, plot.uuid, target_plot_type, plot_type_data, plot.plot_type_id
+                )
+                if plot_type_uuid:
+                    plot.plot_type_id = plot_type_uuid  # Ensure relationship is set
 
         plot.update_timestamp()
 
@@ -475,10 +585,10 @@ async def update_plot(
         plot.boundary_geojson = await get_plot_boundary_as_geojson(session, plot.id)
         plot.centroid_geojson = await get_plot_centroid_as_geojson(session, plot.id)
 
-        # Get plot type data manually
+        # Get plot type data using the new relationship
         plot_dict = plot.to_dict(include_geometry=True)
-        if plot.plot_type:
-            type_data = await get_plot_type_data(session, plot.uuid, plot.plot_type.value)
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
             if type_data:
                 plot_dict['plot_type_data'] = type_data.to_dict()
 
@@ -522,6 +632,10 @@ async def delete_plot(
         farm_query = select(Farm).filter(Farm.id == plot.farm_id)
         farm_result = await session.execute(farm_query)
         farm = farm_result.scalar_one()
+
+        # Delete ALL related plot type data first to avoid foreign key constraint violation
+        # This comprehensive function will check all plot type tables for any data referencing this plot
+        deleted_count = await delete_all_plot_type_data_for_plot(session, plot.uuid)
 
         await session.delete(plot)
         await session.commit()
@@ -771,3 +885,132 @@ def validate_plot_geojson_polygon(geojson_data: Dict[str, Any]) -> bool:
 
     except Exception:
         return False
+
+
+async def get_plot_with_type_data(
+        session: AsyncSession,
+        user: Dict[str, Any],
+        plot_id: str
+) -> Dict[str, Any]:
+    """Get a plot with its plot type data specifically"""
+    try:
+        # Join with farm to check ownership
+        query = select(Plot).join(Farm).filter(
+            Plot.uuid == plot_id,
+            Farm.owner_id == user["uuid"]
+        )
+
+        result = await session.execute(query)
+        plot = result.scalar_one_or_none()
+
+        if not plot:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Plot not found"
+            }
+
+        # Get plot type data using the new relationship
+        plot_dict = plot.to_dict()
+        plot_type_data = None
+        
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
+            if type_data:
+                plot_type_data = type_data.to_dict()
+
+        return {
+            "status": "success",
+            "data": {
+                "plot": plot_dict,
+                "plot_type_data": plot_type_data
+            },
+            "error": None
+        }
+
+    except Exception as e:
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }
+
+
+async def update_plot_type_data_only(
+        session: AsyncSession,
+        user: Dict[str, Any],
+        plot_id: str,
+        plot_type_data: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Update only the plot type data for a plot"""
+    try:
+        # Join with farm to check ownership
+        query = select(Plot).join(Farm).filter(
+            Plot.uuid == plot_id,
+            Farm.owner_id == user["uuid"]
+        )
+        result = await session.execute(query)
+        plot = result.scalar_one_or_none()
+
+        if not plot:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Plot not found"
+            }
+
+        if not plot.plot_type:
+            return {
+                "status": "error",
+                "data": None,
+                "error": "Plot has no plot type set"
+            }
+
+        # Update plot type data using the new function
+        plot_type_uuid = await create_or_update_plot_type_data(
+            session, plot.uuid, plot.plot_type.value, plot_type_data, plot.plot_type_id
+        )
+        
+        if plot_type_uuid:
+            plot.plot_type_id = plot_type_uuid  # Ensure relationship is set
+            plot.update_timestamp()
+
+        await session.commit()
+        await session.refresh(plot)
+
+        # Get farm for cache invalidation
+        farm_query = select(Farm).filter(Farm.id == plot.farm_id)
+        farm_result = await session.execute(farm_query)
+        farm = farm_result.scalar_one()
+
+        # Invalidate relevant caches
+        await invalidate_patterns(user['uuid'], [
+            f"plots:farm:{farm.uuid}:*",
+            f"plots:user:*",
+            "dashboard",
+            "stats:*"
+        ])
+
+        # Return updated plot type data
+        updated_type_data = None
+        if plot.plot_type_id:
+            type_data = await plot.get_plot_type_data(session)
+            if type_data:
+                updated_type_data = type_data.to_dict()
+
+        return {
+            "status": "success",
+            "data": {
+                "plot_id": plot.uuid,
+                "plot_type_data": updated_type_data
+            },
+            "error": None
+        }
+
+    except Exception as e:
+        await session.rollback()
+        return {
+            "status": "error",
+            "data": None,
+            "error": str(e)
+        }

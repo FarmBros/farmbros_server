@@ -201,3 +201,43 @@ async def get_plot_stats(
         user_id=data.get('user_id'),
         farm_id=data.get('farm_id')
     )
+
+
+@router.post("/get_plot_type_data", response_model=None)
+async def get_plot_type_data(
+        request: Request,
+        user: Annotated[dict, Depends(get_current_user)],
+        session: AsyncSession = Depends(runner.get_db_session),
+):
+    data = await request.json()
+    try:
+        plot_id = data['plot_id']
+    except KeyError:
+        raise HTTPException(status_code=400, detail="plot_id is required")
+
+    return await plot_controller.get_plot_with_type_data(
+        session=session,
+        user=user,
+        plot_id=plot_id
+    )
+
+
+@router.post("/update_plot_type_data", response_model=None)
+async def update_plot_type_data(
+        request: Request,
+        user: Annotated[dict, Depends(get_current_user)],
+        session: AsyncSession = Depends(runner.get_db_session),
+):
+    data = await request.json()
+    try:
+        plot_id = data['plot_id']
+        plot_type_data = data['plot_type_data']
+    except KeyError as e:
+        raise HTTPException(status_code=400, detail=f"{e.args[0]} is required")
+
+    return await plot_controller.update_plot_type_data_only(
+        session=session,
+        user=user,
+        plot_id=plot_id,
+        plot_type_data=plot_type_data
+    )

@@ -45,6 +45,7 @@ class Plot(Base):
     # Plot characteristics
     plot_number = Column(String(50))  # e.g., "A1", "B2", etc.
     plot_type = Column(Enum(PlotType), default=PlotType.FIELD, nullable=False)
+    plot_type_id = Column(String(36), nullable=True)  # UUID of the specific plot type record
 
     # Geometry - polygon for plot boundary
     boundary = Column(Geography('POLYGON', srid=4326), nullable=False)
@@ -114,3 +115,19 @@ class Plot(Base):
 
     def update_timestamp(self):
         self.updated_at = datetime.utcnow()
+    
+    async def get_plot_type_data(self, session):
+        """Get the plot type specific data for this plot"""
+        if not self.plot_type_id or not self.plot_type:
+            return None
+        
+        from models.plot_types import PLOT_TYPE_MODELS
+        from sqlalchemy import select
+        
+        if self.plot_type.value not in PLOT_TYPE_MODELS:
+            return None
+        
+        plot_type_model = PLOT_TYPE_MODELS[self.plot_type.value]
+        query = select(plot_type_model).filter(plot_type_model.uuid == self.plot_type_id)
+        result = await session.execute(query)
+        return result.scalar_one_or_none()
