@@ -54,3 +54,14 @@ async def invalidate_user_cache(user_id: str, resource: Optional[str] = None):
     else:
         # Clear everything for this user
         await invalidate_patterns(user_id, ["*"])
+
+async def clear_all_cache():
+    """Clear the entire Redis cache"""
+    try:
+        cache = caches.get('default')
+        client = cache.client
+        await client.flushdb()
+        return True
+    except Exception as e:
+        print(f"Error clearing cache: {e}")
+        return False
