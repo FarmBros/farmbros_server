@@ -364,12 +364,13 @@ async def get_plot(
 
 
 @cached(cache=Cache.REDIS, ttl=86400,
-    key_builder=lambda f, session, farm_id, include_geojson=True, skip=0, limit=100:
-    gen_user_key("system", "plots", "farm", farm_id,
+    key_builder=lambda f, session, user_id, farm_id, include_geojson=True, skip=0, limit=100:
+    gen_user_key(user_id, "plots", "farm", farm_id,
                   gen_query_hash({"skip": skip, "limit": limit, "include_geojson": include_geojson}))
 )
 async def get_plots_by_farm(
         session: AsyncSession,
+        user_id: str, # used for caching
         farm_id: str,
         include_geojson: bool = True,
         skip: int = 0,
@@ -380,13 +381,14 @@ async def get_plots_by_farm(
         farm_query = select(Farm).filter(Farm.uuid == farm_id)
         farm_result = await session.execute(farm_query)
         farm = farm_result.scalar_one_or_none()
-        
+
         if not farm:
             return {
                 "status": "error",
                 "data": None,
                 "error": "Farm not found"
             }
+
 
         query = select(Plot).filter(
             Plot.farm_id == farm.id
@@ -404,6 +406,7 @@ async def get_plots_by_farm(
         }
 
     except Exception as e:
+        print(e)
         return {
             "status": "error",
             "data": None,

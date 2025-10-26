@@ -64,6 +64,7 @@ async def get_plots_by_farm(
 
     return await plot_controller.get_plots_by_farm(
         session=session,
+        user_id=user['uuid'],
         farm_id=farm_id,
         include_geojson=data.get('include_geojson', True),
         skip=data.get('skip', 0),
