@@ -125,7 +125,7 @@ async def create_planted_crop(
 
         session.add(planted_crop)
         await session.commit()
-        await session.refresh(planted_crop)
+        await session.refresh(planted_crop, ['crop', 'plot', 'user'])
 
         # Invalidate relevant caches
         await invalidate_patterns("system", [
@@ -170,7 +170,11 @@ async def get_planted_crop(
                 "error": "User not found"
             }
 
-        query = select(PlantedCrop).filter(
+        query = select(PlantedCrop).options(
+            selectinload(PlantedCrop.crop),
+            selectinload(PlantedCrop.plot),
+            selectinload(PlantedCrop.user)
+        ).filter(
             PlantedCrop.uuid == planted_crop_uuid,
             PlantedCrop.user_id == user.id
         )
@@ -220,7 +224,11 @@ async def get_all_planted_crops(
                 "error": "User not found"
             }
 
-        query = select(PlantedCrop)
+        query = select(PlantedCrop).options(
+            selectinload(PlantedCrop.crop),
+            selectinload(PlantedCrop.plot),
+            selectinload(PlantedCrop.user)
+        )
 
         # Apply filters - always filter by user_id from token
         filters = [PlantedCrop.user_id == user.id]
@@ -281,7 +289,11 @@ async def update_planted_crop(
                 "error": "User not found"
             }
 
-        query = select(PlantedCrop).filter(
+        query = select(PlantedCrop).options(
+            selectinload(PlantedCrop.crop),
+            selectinload(PlantedCrop.plot),
+            selectinload(PlantedCrop.user)
+        ).filter(
             PlantedCrop.uuid == planted_crop_uuid,
             PlantedCrop.user_id == user.id
         )
@@ -601,19 +613,19 @@ async def get_planted_crop_statistics(
         total_result = await session.execute(total_query)
         total_count = total_result.scalar()
 
-        # Count by plot
+        # Count by plot - return UUIDs instead of integer IDs
         by_plot_query = select(
-            PlantedCrop.plot_id,
+            Plot.uuid,
             func.count(PlantedCrop.id).label('count')
-        ).filter(base_filter).group_by(PlantedCrop.plot_id)
+        ).join(Plot, PlantedCrop.plot_id == Plot.id).filter(base_filter).group_by(Plot.uuid)
         by_plot_result = await session.execute(by_plot_query)
         by_plot = [{"plot_id": row[0], "count": row[1]} for row in by_plot_result]
 
-        # Count by crop
+        # Count by crop - return UUIDs instead of integer IDs
         by_crop_query = select(
-            PlantedCrop.crop_id,
+            Crop.uuid,
             func.count(PlantedCrop.id).label('count')
-        ).filter(base_filter).group_by(PlantedCrop.crop_id)
+        ).join(Crop, PlantedCrop.crop_id == Crop.id).filter(base_filter).group_by(Crop.uuid)
         by_crop_result = await session.execute(by_crop_query)
         by_crop = [{"crop_id": row[0], "count": row[1]} for row in by_crop_result]
 
