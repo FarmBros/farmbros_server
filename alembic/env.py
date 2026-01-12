@@ -25,6 +25,8 @@ from models.farm import Farm
 from models.plot import Plot
 from models.crop import Crop
 from models.planted_crop import PlantedCrop
+from models.animal_type import AnimalType
+from models.animal import Animal
 
 target_metadata = runner.Base.metadata
 # target_metadata = None

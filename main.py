@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from routes import user_routes, farm_routes, plot_routes, service_routes, crop_routes, planted_crop_routes
+from routes import user_routes, farm_routes, plot_routes, service_routes, crop_routes, planted_crop_routes, animal_type_routes, animal_routes
 
 from models import runner
 
@@ -11,6 +11,8 @@ app.include_router(plot_routes.router)
 app.include_router(service_routes.router)
 app.include_router(crop_routes.router)
 app.include_router(planted_crop_routes.router)
+app.include_router(animal_type_routes.router)
+app.include_router(animal_routes.router)
 
 
 @app.get("/")
