@@ -252,7 +252,7 @@ async def create_plot(
 
         plot = Plot(
             name=name,
-            farm_id=farm.uuid,
+            farm_id=farm.id,  # Use integer ID for FK relationship
             plot_type=plot_type,
             plot_number=plot_number,
             notes=notes
