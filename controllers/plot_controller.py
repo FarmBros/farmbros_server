@@ -252,7 +252,7 @@ async def create_plot(
 
         plot = Plot(
             name=name,
-            farm_id=farm.id,
+            farm_id=farm.uuid,
             plot_type=plot_type,
             plot_number=plot_number,
             notes=notes

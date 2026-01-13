@@ -68,6 +68,14 @@ async def create_animal(
                     "error": f"Plot with uuid {plot_uuid} not found"
                 }
 
+            # Verify plot belongs to the specified farm
+            if plot.farm_id != farm.id:
+                return {
+                    "status": "error",
+                    "data": None,
+                    "error": f"Plot does not belong to the specified farm"
+                }
+
         user_query = select(User).filter(User.uuid == user_uuid)
         user_result = await session.execute(user_query)
         user = user_result.scalar_one_or_none()
@@ -359,6 +367,9 @@ async def update_animal(
             }
 
         # Update foreign key relationships if provided
+        # Track the effective farm_id for plot validation
+        effective_farm_id = animal.farm_id
+
         if "farm_id" in data and data["farm_id"]:
             farm_query = select(Farm).filter(Farm.uuid == data["farm_id"])
             farm_result = await session.execute(farm_query)
@@ -370,6 +381,7 @@ async def update_animal(
                     "error": f"Farm with uuid {data['farm_id']} not found"
                 }
             animal.farm_id = farm.id
+            effective_farm_id = farm.id
 
         if "plot_id" in data:
             if data["plot_id"]:
@@ -382,6 +394,15 @@ async def update_animal(
                         "data": None,
                         "error": f"Plot with uuid {data['plot_id']} not found"
                     }
+
+                # Verify plot belongs to the animal's farm
+                if plot.farm_id != effective_farm_id:
+                    return {
+                        "status": "error",
+                        "data": None,
+                        "error": f"Plot does not belong to the animal's farm"
+                    }
+
                 animal.plot_id = plot.id
             else:
                 animal.plot_id = None
