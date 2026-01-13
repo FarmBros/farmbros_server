@@ -40,7 +40,7 @@ class Plot(Base):
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
-    farm_id = Column(Integer, ForeignKey('farms.id'), nullable=False)
+    farm_id = Column(String(36), ForeignKey('farms.uuid'), nullable=False)
 
     # Plot characteristics
     plot_number = Column(String(50))  # e.g., "A1", "B2", etc.

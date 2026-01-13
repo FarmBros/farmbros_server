@@ -12,11 +12,11 @@ class Animal(Base):
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()))
 
-    # Foreign keys - relationships to other tables
-    farm_id = Column(Integer, ForeignKey('farms.id'), nullable=False)
-    plot_id = Column(Integer, ForeignKey('plots.id'), nullable=True)
-    animal_type_id = Column(Integer, ForeignKey('animal_types.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    # Foreign keys - relationships to other tables (using UUIDs)
+    farm_id = Column(String(36), ForeignKey('farms.uuid'), nullable=False)
+    plot_id = Column(String(36), ForeignKey('plots.uuid'), nullable=True)
+    animal_type_id = Column(String(36), ForeignKey('animal_types.uuid'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.uuid'), nullable=False)
 
     # Basic identification
     name = Column(String(255), nullable=False)  # Individual name or batch name
@@ -74,20 +74,14 @@ class Animal(Base):
         return self.uuid
 
     def to_dict(self):
-        # Return UUIDs for foreign key fields (per API convention)
-        # Check if relationships are loaded to avoid triggering lazy loads
-        farm_uuid = self.farm.uuid if hasattr(self, 'farm') and self.farm else None
-        plot_uuid = self.plot.uuid if hasattr(self, 'plot') and self.plot else None
-        animal_type_uuid = self.animal_type.uuid if hasattr(self, 'animal_type') and self.animal_type else None
-        user_uuid = self.user.uuid if hasattr(self, 'user') and self.user else None
-
+        # Foreign keys are now UUIDs in the database, return them directly
         return {
             'id': self.id,
             'uuid': self.uuid,
-            'farm_id': farm_uuid,
-            'plot_id': plot_uuid,
-            'animal_type_id': animal_type_uuid,
-            'user_id': user_uuid,
+            'farm_id': self.farm_id,
+            'plot_id': self.plot_id,
+            'animal_type_id': self.animal_type_id,
+            'user_id': self.user_id,
             'name': self.name,
             'identifier': self.identifier,
             'color': self.color,

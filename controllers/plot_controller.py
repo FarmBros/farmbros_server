@@ -232,7 +232,7 @@ async def create_plot(
                     plot_geometry,
                     func.ST_GeomFromText(func.ST_AsText(Farm.boundary), 4326)
                 )
-            ).filter(Farm.id == farm.id)
+            ).filter(Farm.uuid == farm.uuid)
             
             boundary_check_result = await session.execute(boundary_check_query)
             is_within_farm = boundary_check_result.scalar()
@@ -252,7 +252,7 @@ async def create_plot(
 
         plot = Plot(
             name=name,
-            farm_id=farm.id,  # Use integer ID for FK relationship
+            farm_id=farm_id,  # Use UUID for FK relationship
             plot_type=plot_type,
             plot_number=plot_number,
             notes=notes
@@ -389,9 +389,8 @@ async def get_plots_by_farm(
                 "error": "Farm not found"
             }
 
-
         query = select(Plot).filter(
-            Plot.farm_id == farm.id
+            Plot.farm_id == farm.uuid
         ).offset(skip).limit(limit)
 
         result = await session.execute(query)
@@ -511,7 +510,7 @@ async def update_plot(
                         plot_geometry,
                         func.ST_GeomFromText(func.ST_AsText(Farm.boundary), 4326)
                     )
-                ).filter(Farm.id == plot.farm_id)
+                ).filter(Farm.uuid == plot.farm_id)
                 
                 boundary_check_result = await session.execute(boundary_check_query)
                 is_within_farm = boundary_check_result.scalar()
@@ -572,7 +571,7 @@ async def update_plot(
         await session.refresh(plot)
 
         # Get farm for cache invalidation
-        farm_query = select(Farm).filter(Farm.id == plot.farm_id)
+        farm_query = select(Farm).filter(Farm.uuid == plot.farm_id)
         farm_result = await session.execute(farm_query)
         farm = farm_result.scalar_one()
 
@@ -632,7 +631,7 @@ async def delete_plot(
             }
 
         # Get farm for cache invalidation
-        farm_query = select(Farm).filter(Farm.id == plot.farm_id)
+        farm_query = select(Farm).filter(Farm.uuid == plot.farm_id)
         farm_result = await session.execute(farm_query)
         farm = farm_result.scalar_one()
 
@@ -724,7 +723,7 @@ async def count_plots_by_farm(session: AsyncSession, farm_id: str) -> Dict[str, 
                 "error": "Farm not found"
             }
 
-        query = select(func.count(Plot.id)).filter(Plot.farm_id == farm.id)
+        query = select(func.count(Plot.id)).filter(Plot.farm_id == farm.uuid)
         result = await session.execute(query)
         count = result.scalar()
 
@@ -756,7 +755,7 @@ async def calculate_total_plot_area_by_farm(session: AsyncSession, farm_id: str)
                 "error": "Farm not found"
             }
 
-        query = select(func.sum(Plot.area_sqm)).filter(Plot.farm_id == farm.id)
+        query = select(func.sum(Plot.area_sqm)).filter(Plot.farm_id == farm.uuid)
         result = await session.execute(query)
         total_area = result.scalar()
 
@@ -794,7 +793,7 @@ async def get_plot_statistics(
                     "data": None,
                     "error": "Farm not found"
                 }
-            count_query = count_query.filter(Plot.farm_id == farm.id)
+            count_query = count_query.filter(Plot.farm_id == farm.uuid)
         elif user_id:
             count_query = count_query.join(Farm).filter(Farm.owner_id == user_id)
 
@@ -823,7 +822,7 @@ async def get_plot_statistics(
         )
 
         if farm_id:
-            stats_query = stats_query.filter(Plot.farm_id == farm.id)
+            stats_query = stats_query.filter(Plot.farm_id == farm.uuid)
         elif user_id:
             stats_query = stats_query.join(Farm).filter(Farm.owner_id == user_id)
 
@@ -982,7 +981,7 @@ async def update_plot_type_data_only(
         await session.refresh(plot)
 
         # Get farm for cache invalidation
-        farm_query = select(Farm).filter(Farm.id == plot.farm_id)
+        farm_query = select(Farm).filter(Farm.uuid == plot.farm_id)
         farm_result = await session.execute(farm_query)
         farm = farm_result.scalar_one()
 

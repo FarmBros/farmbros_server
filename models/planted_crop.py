@@ -12,10 +12,10 @@ class PlantedCrop(Base):
     id = Column(Integer, primary_key=True)
     uuid = Column(String(36), unique=True, default=lambda: str(uuid.uuid4()))
 
-    # Foreign keys
-    crop_id = Column(Integer, ForeignKey('crops.id'), nullable=False)
-    plot_id = Column(Integer, ForeignKey('plots.id'), nullable=False)
-    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
+    # Foreign keys (using UUIDs)
+    crop_id = Column(String(36), ForeignKey('crops.uuid'), nullable=False)
+    plot_id = Column(String(36), ForeignKey('plots.uuid'), nullable=False)
+    user_id = Column(String(36), ForeignKey('users.uuid'), nullable=False)
 
     # Planting information
     planting_method = Column(String(100), nullable=True)
@@ -62,18 +62,13 @@ class PlantedCrop(Base):
         return self.uuid
 
     def to_dict(self):
-        # Return UUIDs for foreign key fields (per API convention)
-        # Check if relationships are loaded to avoid triggering lazy loads
-        crop_uuid = self.crop.uuid if hasattr(self, 'crop') and self.crop else None
-        plot_uuid = self.plot.uuid if hasattr(self, 'plot') and self.plot else None
-        user_uuid = self.user.uuid if hasattr(self, 'user') and self.user else None
-
+        # Foreign keys are now UUIDs in the database, return them directly
         return {
             'id': self.id,
             'uuid': self.uuid,
-            'crop_id': crop_uuid,
-            'plot_id': plot_uuid,
-            'user_id': user_uuid,
+            'crop_id': self.crop_id,
+            'plot_id': self.plot_id,
+            'user_id': self.user_id,
             'planting_method': self.planting_method,
             'planting_spacing': self.planting_spacing,
             'germination_date': self.germination_date.isoformat() if self.germination_date else None,

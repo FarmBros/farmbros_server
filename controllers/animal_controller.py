@@ -69,7 +69,7 @@ async def create_animal(
                 }
 
             # Verify plot belongs to the specified farm
-            if plot.farm_id != farm.id:
+            if plot.farm_id != farm_uuid:
                 return {
                     "status": "error",
                     "data": None,
@@ -143,11 +143,11 @@ async def create_animal(
             }
 
         animal = Animal(
-            farm_id=farm.id,
-            animal_type_id=animal_type.id,
-            user_id=user.id,
+            farm_id=farm_uuid,
+            animal_type_id=animal_type_uuid,
+            user_id=user_uuid,
             name=name,
-            plot_id=plot.id if plot else None,
+            plot_id=plot_uuid if plot else None,
             identifier=data.get("identifier"),
             color=data.get("color"),
             use=data.get("use"),
@@ -208,14 +208,9 @@ async def get_animal(
                 "error": "User not found"
             }
 
-        query = select(Animal).options(
-            selectinload(Animal.farm),
-            selectinload(Animal.plot),
-            selectinload(Animal.animal_type),
-            selectinload(Animal.user)
-        ).filter(
+        query = select(Animal).filter(
             Animal.uuid == animal_uuid,
-            Animal.user_id == user.id
+            Animal.user_id == user_uuid
         )
         result = await session.execute(query)
         animal = result.scalar_one_or_none()
@@ -270,39 +265,34 @@ async def get_all_animals(
                 "error": "User not found"
             }
 
-        query = select(Animal).options(
-            selectinload(Animal.farm),
-            selectinload(Animal.plot),
-            selectinload(Animal.animal_type),
-            selectinload(Animal.user)
-        ).filter(Animal.user_id == user.id)
+        query = select(Animal).filter(Animal.user_id == user_uuid)
 
         # Apply filters
         if farm_id:
+            # Verify farm exists
             farm_query = select(Farm).filter(Farm.uuid == farm_id)
             farm_result = await session.execute(farm_query)
             farm = farm_result.scalar_one_or_none()
-            if farm:
-                query = query.filter(Animal.farm_id == farm.id)
-            else:
+            if not farm:
                 return {
                     "status": "error",
                     "data": None,
                     "error": f"Farm with uuid {farm_id} not found"
                 }
+            query = query.filter(Animal.farm_id == farm_id)
 
         if animal_type_id:
+            # Verify animal type exists
             animal_type_query = select(AnimalType).filter(AnimalType.uuid == animal_type_id)
             animal_type_result = await session.execute(animal_type_query)
             animal_type = animal_type_result.scalar_one_or_none()
-            if animal_type:
-                query = query.filter(Animal.animal_type_id == animal_type.id)
-            else:
+            if not animal_type:
                 return {
                     "status": "error",
                     "data": None,
                     "error": f"Animal type with uuid {animal_type_id} not found"
                 }
+            query = query.filter(Animal.animal_type_id == animal_type_id)
 
         if is_active is not None:
             if is_active:
@@ -354,7 +344,7 @@ async def update_animal(
 
         query = select(Animal).filter(
             Animal.uuid == animal_uuid,
-            Animal.user_id == user.id
+            Animal.user_id == user_uuid
         )
         result = await session.execute(query)
         animal = result.scalar_one_or_none()
@@ -380,8 +370,8 @@ async def update_animal(
                     "data": None,
                     "error": f"Farm with uuid {data['farm_id']} not found"
                 }
-            animal.farm_id = farm.id
-            effective_farm_id = farm.id
+            animal.farm_id = data["farm_id"]
+            effective_farm_id = data["farm_id"]
 
         if "plot_id" in data:
             if data["plot_id"]:
@@ -403,7 +393,7 @@ async def update_animal(
                         "error": f"Plot does not belong to the animal's farm"
                     }
 
-                animal.plot_id = plot.id
+                animal.plot_id = data["plot_id"]
             else:
                 animal.plot_id = None
 
@@ -417,7 +407,7 @@ async def update_animal(
                     "data": None,
                     "error": f"Animal type with uuid {data['animal_type_id']} not found"
                 }
-            animal.animal_type_id = animal_type.id
+            animal.animal_type_id = data["animal_type_id"]
 
         # Update basic fields
         if "name" in data:
@@ -469,13 +459,13 @@ async def update_animal(
         animal.update_timestamp()
 
         await session.commit()
-        await session.refresh(animal, ['farm', 'plot', 'animal_type', 'user'])
+        await session.refresh(animal)
 
         # Invalidate relevant caches
         await invalidate_patterns("system", [
             "animals:*",
             f"farm:{animal.farm_id}:*",
-            f"user:{user.id}:*",
+            f"user:{user_uuid}:*",
             "dashboard",
             "stats:*"
         ])
@@ -516,7 +506,7 @@ async def delete_animal(
 
         query = select(Animal).filter(
             Animal.uuid == animal_uuid,
-            Animal.user_id == user.id
+            Animal.user_id == user_uuid
         )
         result = await session.execute(query)
         animal = result.scalar_one_or_none()
@@ -537,7 +527,7 @@ async def delete_animal(
         await invalidate_patterns("system", [
             "animals:*",
             f"farm:{farm_id}:*",
-            f"user:{user.id}:*",
+            f"user:{user_uuid}:*",
             "dashboard",
             "stats:*"
         ])
@@ -580,13 +570,8 @@ async def search_animals(
 
         search_pattern = f"%{search_term}%"
 
-        query = select(Animal).options(
-            selectinload(Animal.farm),
-            selectinload(Animal.plot),
-            selectinload(Animal.animal_type),
-            selectinload(Animal.user)
-        ).filter(
-            Animal.user_id == user.id,
+        query = select(Animal).filter(
+            Animal.user_id == user_uuid,
             or_(
                 Animal.name.ilike(search_pattern),
                 Animal.identifier.ilike(search_pattern),
@@ -634,22 +619,24 @@ async def count_animals(
                 "error": "User not found"
             }
 
-        query = select(func.count(Animal.id)).filter(Animal.user_id == user.id)
+        query = select(func.count(Animal.id)).filter(Animal.user_id == user_uuid)
 
         # Apply filters
         if farm_id:
+            # Verify farm exists
             farm_query = select(Farm).filter(Farm.uuid == farm_id)
             farm_result = await session.execute(farm_query)
             farm = farm_result.scalar_one_or_none()
             if farm:
-                query = query.filter(Animal.farm_id == farm.id)
+                query = query.filter(Animal.farm_id == farm_id)
 
         if animal_type_id:
+            # Verify animal type exists
             animal_type_query = select(AnimalType).filter(AnimalType.uuid == animal_type_id)
             animal_type_result = await session.execute(animal_type_query)
             animal_type = animal_type_result.scalar_one_or_none()
             if animal_type:
-                query = query.filter(Animal.animal_type_id == animal_type.id)
+                query = query.filter(Animal.animal_type_id == animal_type_id)
 
         if is_active is not None:
             if is_active:
@@ -694,15 +681,16 @@ async def get_animal_statistics(
             }
 
         # Base query filter
-        base_filter = [Animal.user_id == user.id]
+        base_filter = [Animal.user_id == user_uuid]
 
         # Add farm filter if provided
         if farm_id:
+            # Verify farm exists
             farm_query = select(Farm).filter(Farm.uuid == farm_id)
             farm_result = await session.execute(farm_query)
             farm = farm_result.scalar_one_or_none()
             if farm:
-                base_filter.append(Animal.farm_id == farm.id)
+                base_filter.append(Animal.farm_id == farm_id)
 
         # Count total animals
         total_query = select(func.count(Animal.id)).filter(and_(*base_filter))
