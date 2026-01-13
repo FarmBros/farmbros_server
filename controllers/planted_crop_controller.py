@@ -107,11 +107,10 @@ async def create_planted_crop(
                     "data": None,
                     "error": "Invalid harvest_date format"
                 }
-
         planted_crop = PlantedCrop(
-            crop_id=crop.id,
-            plot_id=plot.id,
-            user_id=user.id,
+            crop_id=crop.uuid,
+            plot_id=plot.uuid,
+            user_id=user.uuid,
             planting_method=data.get("planting_method"),
             planting_spacing=data.get("planting_spacing"),
             germination_date=germination_date,
@@ -130,8 +129,8 @@ async def create_planted_crop(
         # Invalidate relevant caches
         await invalidate_patterns("system", [
             "planted_crops:*",
-            f"plot:{plot.id}:*",
-            f"user:{user.id}:*",
+            f"plot:{plot.uuid}:*",
+            f"user:{user.uuid}:*",
             "dashboard",
             "stats:*"
         ])
@@ -176,7 +175,7 @@ async def get_planted_crop(
             selectinload(PlantedCrop.user)
         ).filter(
             PlantedCrop.uuid == planted_crop_uuid,
-            PlantedCrop.user_id == user.id
+            PlantedCrop.user_id == user.uuid
         )
         result = await session.execute(query)
         planted_crop = result.scalar_one_or_none()
@@ -231,21 +230,21 @@ async def get_all_planted_crops(
         )
 
         # Apply filters - always filter by user_id from token
-        filters = [PlantedCrop.user_id == user.id]
+        filters = [PlantedCrop.user_id == user.uuid]
 
         if plot_uuid:
             plot_query = select(Plot).filter(Plot.uuid == plot_uuid)
             plot_result = await session.execute(plot_query)
             plot = plot_result.scalar_one_or_none()
             if plot:
-                filters.append(PlantedCrop.plot_id == plot.id)
+                filters.append(PlantedCrop.plot_id == plot.uuid)
 
         if crop_uuid:
             crop_query = select(Crop).filter(Crop.uuid == crop_uuid)
             crop_result = await session.execute(crop_query)
             crop = crop_result.scalar_one_or_none()
             if crop:
-                filters.append(PlantedCrop.crop_id == crop.id)
+                filters.append(PlantedCrop.crop_id == crop.uuid)
 
         if filters:
             query = query.filter(and_(*filters))
@@ -295,7 +294,7 @@ async def update_planted_crop(
             selectinload(PlantedCrop.user)
         ).filter(
             PlantedCrop.uuid == planted_crop_uuid,
-            PlantedCrop.user_id == user.id
+            PlantedCrop.user_id == user.uuid
         )
         result = await session.execute(query)
         planted_crop = result.scalar_one_or_none()
@@ -415,7 +414,7 @@ async def delete_planted_crop(
 
         query = select(PlantedCrop).filter(
             PlantedCrop.uuid == planted_crop_uuid,
-            PlantedCrop.user_id == user.id
+            PlantedCrop.user_id == user.uuid
         )
         result = await session.execute(query)
         planted_crop = result.scalar_one_or_none()
@@ -480,21 +479,21 @@ async def count_planted_crops(
         query = select(func.count(PlantedCrop.id))
 
         # Apply filters - always filter by user_id from token
-        filters = [PlantedCrop.user_id == user.id]
+        filters = [PlantedCrop.user_id == user.uuid]
 
         if plot_uuid:
             plot_query = select(Plot).filter(Plot.uuid == plot_uuid)
             plot_result = await session.execute(plot_query)
             plot = plot_result.scalar_one_or_none()
             if plot:
-                filters.append(PlantedCrop.plot_id == plot.id)
+                filters.append(PlantedCrop.plot_id == plot.uuid)
 
         if crop_uuid:
             crop_query = select(Crop).filter(Crop.uuid == crop_uuid)
             crop_result = await session.execute(crop_query)
             crop = crop_result.scalar_one_or_none()
             if crop:
-                filters.append(PlantedCrop.crop_id == crop.id)
+                filters.append(PlantedCrop.crop_id == crop.uuid)
 
         if filters:
             query = query.filter(and_(*filters))
@@ -544,14 +543,14 @@ async def get_planted_crops_with_details(
         )
 
         # Apply filters - always filter by user_id from token
-        filters = [PlantedCrop.user_id == user.id]
+        filters = [PlantedCrop.user_id == user.uuid]
 
         if plot_uuid:
             plot_query = select(Plot).filter(Plot.uuid == plot_uuid)
             plot_result = await session.execute(plot_query)
             plot = plot_result.scalar_one_or_none()
             if plot:
-                filters.append(PlantedCrop.plot_id == plot.id)
+                filters.append(PlantedCrop.plot_id == plot.uuid)
 
         if filters:
             query = query.filter(and_(*filters))
@@ -567,7 +566,7 @@ async def get_planted_crops_with_details(
             pc_dict['crop'] = pc.crop.to_dict() if pc.crop else None
             pc_dict['plot'] = pc.plot.to_dict() if pc.plot else None
             pc_dict['user'] = {
-                'id': pc.user.id,
+                'id': pc.user.uuid,
                 'username': pc.user.username,
                 'email': pc.user.email
             } if pc.user else None
@@ -606,7 +605,7 @@ async def get_planted_crop_statistics(
             }
 
         # Base query - always filter by user_id from token
-        base_filter = PlantedCrop.user_id == user.id
+        base_filter = PlantedCrop.user_id == user.uuid
 
         # Total count
         total_query = select(func.count(PlantedCrop.id)).filter(base_filter)
@@ -617,7 +616,7 @@ async def get_planted_crop_statistics(
         by_plot_query = select(
             Plot.uuid,
             func.count(PlantedCrop.id).label('count')
-        ).join(Plot, PlantedCrop.plot_id == Plot.id).filter(base_filter).group_by(Plot.uuid)
+        ).join(Plot, PlantedCrop.plot_id == Plot.uuid).filter(base_filter).group_by(Plot.uuid)
         by_plot_result = await session.execute(by_plot_query)
         by_plot = [{"plot_id": row[0], "count": row[1]} for row in by_plot_result]
 
@@ -625,7 +624,7 @@ async def get_planted_crop_statistics(
         by_crop_query = select(
             Crop.uuid,
             func.count(PlantedCrop.id).label('count')
-        ).join(Crop, PlantedCrop.crop_id == Crop.id).filter(base_filter).group_by(Crop.uuid)
+        ).join(Crop, PlantedCrop.crop_id == Crop.uuid).filter(base_filter).group_by(Crop.uuid)
         by_crop_result = await session.execute(by_crop_query)
         by_crop = [{"crop_id": row[0], "count": row[1]} for row in by_crop_result]
 
